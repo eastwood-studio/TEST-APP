@@ -479,6 +479,36 @@ def page_operations(can_fn, DB_PATH, fmt_eur_fn=None):
                             e_ben   = st.text_input("Bénéficiaire", value=str(row_edit.get("beneficiaire","") or ""))
                         e_info  = st.text_input("Info complémentaire", value=str(row_edit.get("info_complementaire","") or ""))
 
+                        # ── Facture / Lien Drive ──────────────────────────────
+                        st.markdown('<div style="font-family:DM Mono,monospace;font-size:9px;color:#8a7968;text-transform:uppercase;letter-spacing:.12em;margin:8px 0 4px;">Facture</div>', unsafe_allow_html=True)
+                        fac_col1, fac_col2 = st.columns(2)
+                        with fac_col1:
+                            # Afficher la facture existante
+                            _cur_fac_nom = str(row_edit.get("facture_nom","") or "")
+                            if _cur_fac_nom:
+                                st.markdown(f'<div style="font-size:11px;color:#395f30;padding:4px 0;">📄 {_cur_fac_nom}</div>', unsafe_allow_html=True)
+                                try:
+                                    _cur_fac_bytes = bytes(row_edit["facture_data"]) if row_edit.get("facture_data") is not None else None
+                                    if _cur_fac_bytes:
+                                        st.download_button("⬇ Télécharger", _cur_fac_bytes,
+                                            file_name=_cur_fac_nom, key=f"dl_cur_fac_{sel_id}")
+                                except Exception:
+                                    pass
+                            e_fac_file = st.file_uploader(
+                                "Remplacer / Ajouter une facture (PDF, image)",
+                                type=["pdf","jpg","jpeg","png"],
+                                key=f"fac_upload_{sel_id}"
+                            )
+                        with fac_col2:
+                            e_drive_link = st.text_input(
+                                "Lien Google Drive / facture",
+                                value=str(row_edit.get("source","") or ""),
+                                placeholder="https://drive.google.com/file/...",
+                                key=f"drive_link_{sel_id}"
+                            )
+                            if e_drive_link and e_drive_link.startswith("http"):
+                                st.markdown(f'<a href="{e_drive_link}" target="_blank" style="font-family:DM Mono,monospace;font-size:10px;color:#7b506f;">↗ Ouvrir le document</a>', unsafe_allow_html=True)
+
                         save_col, del_col = st.columns(2)
                         with save_col:
                             if st.form_submit_button("💾 Enregistrer", type="primary"):
@@ -495,6 +525,7 @@ def page_operations(can_fn, DB_PATH, fmt_eur_fn=None):
                                     ("beneficiaire",     "TEXT DEFAULT ''"),
                                     ("info_complementaire","TEXT DEFAULT ''"),
                                     ("ref_produit",      "TEXT DEFAULT ''"),
+                                    ("source",           "TEXT DEFAULT ''"),
                                 ]:
                                     try:
                                         conn.execute(f"ALTER TABLE transactions ADD COLUMN {_mc} {_md}")
@@ -523,10 +554,19 @@ def page_operations(can_fn, DB_PATH, fmt_eur_fn=None):
                                     ("payeur",            e_pay),
                                     ("beneficiaire",      e_ben),
                                     ("info_complementaire", e_info),
+                                    ("source",            e_drive_link),
                                 ]:
                                     if col in _existing_cols:
                                         _set_parts.append(f"{col}=?")
                                         _vals.append(val)
+
+                                # Facture uploadée
+                                if e_fac_file is not None:
+                                    _fac_bytes = e_fac_file.read()
+                                    for col, val in [("facture_data", _fac_bytes), ("facture_nom", e_fac_file.name)]:
+                                        if col in _existing_cols:
+                                            _set_parts.append(f"{col}=?")
+                                            _vals.append(val)
 
                                 _vals.append(sel_id)
                                 conn.execute(
